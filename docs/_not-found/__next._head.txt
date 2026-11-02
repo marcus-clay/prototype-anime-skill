@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[97367,["/prototype-anime-skill/_next/static/chunks/2f236954d6a65e12.js"],"ViewportBoundary"]
+3:I[97367,["/prototype-anime-skill/_next/static/chunks/2f236954d6a65e12.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"gSPH1lBr1cgtjds1AoxWk","rsc":["$","$1","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"prototype-anime, démos en direct"}],["$","meta","1",{"name":"description","content":"Deux films d’interface, mobile et desktop, joués en direct par le code de la skill prototype-anime."}]]}]}]}],null]}],"loading":null,"isPartial":false}

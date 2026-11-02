@@ -4,12 +4,14 @@ Une skill pour Claude et Codex qui fabrique des **prototypes animés d'interface
 
 Elle sert à montrer un parcours sans rien lire : pour un case study, un portfolio, une démo ou un deck.
 
-## Aperçu
+## Démos en direct
+
+**[Lancer les deux films dans leur lecteur](https://marcus-clay.github.io/prototype-anime-skill/)** : ils démarrent à l'écran, se mettent en pause d'un clic et tournent en boucle.
 
 <table>
   <tr>
-    <td align="center" valign="top"><img src="docs/demo-mobile.webp" alt="Film d'un parcours mobile : installation, connexion par SMS, réservation d'un créneau" width="300"></td>
-    <td align="center" valign="top"><img src="docs/demo-desktop.webp" alt="Film d'un parcours desktop : connexion, création d'une séance dans un dialogue, confirmation" width="560"></td>
+    <td align="center" valign="top"><a href="https://marcus-clay.github.io/prototype-anime-skill/"><img src="docs/demo-mobile.png" alt="Lancer la démo mobile : installation, connexion par SMS, réservation d'un créneau" width="260"></a></td>
+    <td align="center" valign="top"><a href="https://marcus-clay.github.io/prototype-anime-skill/"><img src="docs/demo-desktop.png" alt="Lancer la démo desktop : connexion, création d'une séance dans un dialogue, confirmation" width="520"></a></td>
   </tr>
   <tr>
     <td align="center">Mobile : le doigt appuie, le clavier se remplit, la caméra suit l'action</td>
@@ -17,7 +19,7 @@ Elle sert à montrer un parcours sans rien lire : pour un case study, un portfo
   </tr>
 </table>
 
-Les deux films sont joués par le code de ce dépôt, sur une app imaginaire (« Lumen »). Les sources sont dans [`prototype-anime/reference/`](prototype-anime/reference/) : `exemple-films.tsx` pour le mobile, `exemple-films-desktop.tsx` pour le desktop.
+Les deux films sont joués par le code de ce dépôt, sur une app imaginaire (« Lumen »). Les sources sont dans [`prototype-anime/reference/`](prototype-anime/reference/) : `exemple-films.tsx` pour le mobile, `exemple-films-desktop.tsx` pour le desktop. Le code de la page de démos est dans [`docs/`](docs/).
 
 ## Installer la skill
 
