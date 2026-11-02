@@ -40,8 +40,8 @@ export function startFilm(): FilmStep[] {
       screen: (
         <StoreScreen
           name="Lumen"
-          tagline="Vos notes, partout"
-          description="Écrivez, classez et retrouvez vos notes sur tous vos appareils, même sans connexion."
+          tagline="Réservez vos séances"
+          description="Trouvez un créneau près de chez vous, réservez en deux appuis et retrouvez vos séances à venir, même hors connexion."
           icon={screen('app-icon')}
           shots={[screen('store-01'), screen('store-02')]}
           installAt={0.7}

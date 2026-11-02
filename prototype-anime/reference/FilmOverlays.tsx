@@ -221,7 +221,7 @@ export function StoreScreen({
   stats = [
     ['4,7', 'note'],
     ['1 M', 'utilisateurs'],
-    ['Productivité', 'catégorie'],
+    ['Style de vie', 'catégorie'],
   ],
 }: {
   icon: string
@@ -482,7 +482,7 @@ export function SmsBanner({ at, until, title, body }: { at: number; until: numbe
 }
 
 /** A checkbox that gets checked under the finger: the box fills with a small pop, then the check draws itself. */
-export function CheckboxCheck({ x, y, size = 25, at, color = '#1d5c37' }: { x: number; y: number; size?: number; at: number; color?: string }) {
+export function CheckboxCheck({ x, y, size = 25, at, color = ACCENT }: { x: number; y: number; size?: number; at: number; color?: string }) {
   const reduce = useGestureReducedMotion()
   const t = useFilmTime(0.016)
   const fill = reduce ? 1 : easeOut(phase(t, at + 0.04, 0.16))
@@ -510,5 +510,40 @@ export function CheckboxCheck({ x, y, size = 25, at, color = '#1d5c37' }: { x: n
         </svg>
       </span>
     </span>
+  )
+}
+
+/**
+ * Something that appears at `at` over the screen: a dropdown, a tooltip, a toast, a dialog. It rises (or drops)
+ * by a few pixels out of a 2 px blur while it fades in, the same arrival as the other gestures. Put the content
+ * inside; `from` says where it comes from. Useful on a desktop, where menus and panels open under the cursor.
+ */
+export function Appear({ x, y, w, h, at, from = 'below', children }: { x: number; y: number; w: number; h: number; at: number; from?: 'below' | 'above' | 'none'; children: React.ReactNode }) {
+  const reduce = useGestureReducedMotion()
+  const t = useFilmTime(0.016)
+  const p = reduce ? 1 : easeOut(phase(t, at, 0.22))
+  if (p <= 0) return null
+  const shift = from === 'none' ? 0 : (from === 'below' ? 8 : -8) * (1 - p)
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', left: x, top: y, width: w, height: h, opacity: p, transform: `translateY(${shift}px)`, filter: p < 1 ? `blur(${2 * (1 - p)}px)` : undefined, pointerEvents: 'none' }}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * A page taller than the window that scrolls: `to` pixels, starting at `at`, over `duration` seconds, on an
+ * ease-in-out like a wheel or a trackpad. Put it in `screen` and keep the fixed parts (a header, a sidebar) out
+ * of it, as siblings of the page, so only the content moves.
+ */
+export function Scroll({ children, to, at, duration = 0.9, width = 1440, height = 900 }: { children: React.ReactNode; to: number; at: number; duration?: number; width?: number; height?: number }) {
+  const reduce = useGestureReducedMotion()
+  const t = useFilmTime(0.016)
+  const u = reduce ? 1 : phase(t, at, duration)
+  const eased = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2
+  return (
+    <div style={{ position: 'absolute', left: 0, top: 0, width, height, overflow: 'hidden' }}>
+      <div style={{ transform: `translateY(${-to * eased}px)`, willChange: 'transform' }}>{children}</div>
+    </div>
   )
 }

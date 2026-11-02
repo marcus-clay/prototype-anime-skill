@@ -8,10 +8,22 @@ import DeviceMockup from '@/components/case-study/DeviceMockup'
 import ScaledScreen from '@/components/case-study/ScaledScreen'
 import { FilmClockContext, easeOut, phase, useFilmTime, type FilmClock } from '@/components/case-study/FilmClock'
 
-/** How a screen arrives: pushed from the right, raised from the bottom (a camera), cross-faded, or opened from the store like an app. */
+/**
+ * What the film is played on. A phone is touched by a finger; a desktop window (a browser) is driven by a
+ * cursor. Every coordinate of a film (taps, camera, gestures) is in the pixel space of the screen:
+ * 390 × 844 for a phone, 1440 × 900 for a desktop unless `size` says otherwise.
+ */
+export type FilmDevice = 'phone' | 'desktop'
+export const FILM_SIZE: Record<FilmDevice, { w: number; h: number }> = { phone: { w: 390, h: 844 }, desktop: { w: 1440, h: 900 } }
+
+/**
+ * How a screen arrives. Phone: pushed from the right, raised from the bottom (a camera), cross-faded, or opened
+ * from the store like an app. Desktop: `push` is a page that slides in a few pixels, `up` a panel or dialog
+ * that rises, `fade` a change of page; `launch` has no meaning on a desktop and falls back to `fade`.
+ */
 export type FilmTransition = 'push' | 'up' | 'fade' | 'launch'
 
-/** A move of the camera, in the 390 × 844 space of the screen */
+/** A move of the camera, in the pixel space of the screen */
 export interface FilmShot {
   at: number
   x: number
@@ -19,26 +31,28 @@ export interface FilmShot {
   zoom: number
 }
 
-/** A press of the finger: where, when (seconds into the step), and the control that darkens under it. */
+/** A press of the finger or a click of the cursor: where, when (seconds into the step), and the control that darkens under it. */
 export interface FilmTap {
   x: number
   y: number
   at: number
   press?: { w: number; h: number; r: number }
-  /** Seconds on the glass, shorter for keys typed in a row */
+  /** Desktop: the control that takes a light tint while the cursor is over it, before the click */
+  hover?: { w: number; h: number; r: number }
+  /** Seconds on the glass (phone) or on the button (desktop), shorter for keys typed in a row */
   hold?: number
 }
 
 export interface FilmStep {
-  /** Still picture of the screen (390 × 844 ratio) */
+  /** Still picture of the screen (same ratio as the screen: 390 × 844 for a phone, 1440 × 900 for a desktop) */
   src?: string
   /** Screen drawn in code, when there is no picture of it */
   screen?: React.ReactNode
   /** Gestures and moments played over the screen, timed from the start of the step */
   overlay?: React.ReactNode
-  /** Where the finger presses on this screen */
+  /** Where the finger presses (or the cursor clicks) on this screen */
   taps?: FilmTap[]
-  /** Where the camera looks: from `at`, it frames the point (x, y) of the screen at `zoom`. Without shots it rests on the whole phone. */
+  /** Where the camera looks: from `at`, it frames the point (x, y) of the screen at `zoom`. Without shots it rests on the whole device. */
   camera?: FilmShot[]
   /** Seconds on screen: the step ends right after its last gesture, so the next screen answers the press */
   duration: number
@@ -50,6 +64,12 @@ interface JourneyFilmProps {
   /** Accessible name of the film */
   label: string
   labels: { play: string; pause: string }
+  /** 'phone' (default) or 'desktop' */
+  device?: FilmDevice
+  /** Pixel space of the screens, when it is not the default of the device (1280 × 800, 1920 × 1080...) */
+  size?: { w: number; h: number }
+  /** Desktop: the address shown in the browser bar */
+  url?: string
 }
 
 /**
@@ -101,35 +121,78 @@ const SCREEN_VARIANTS = {
 }
 
 
+/**
+ * The same changes of screen on a desktop window: nothing travels across 1440 px. A page slides in by a few
+ * pixels while it fades in, a panel rises a little, and the old screen leaves underneath by fading out.
+ */
+const DESKTOP_VARIANTS = {
+  // A page or a panel arrives on top of the old screen, which stays opaque underneath until it is covered; a
+  // change of page (fade) is the opposite, the new screen is already there and the old one fades out on top.
+  // Either way there is never a moment where both are transparent and the empty stage shows through.
+  initial: (move: Move) =>
+    move === 'push'
+      ? { transform: at('24px', '0px'), opacity: 0, zIndex: 1 }
+      : move === 'up'
+        ? { transform: at('0px', '28px'), opacity: 0, zIndex: 1 }
+        : move === 'loop'
+          ? { transform: at('0px', '0px'), opacity: 0, zIndex: 1 }
+          : { transform: at('0px', '0px'), opacity: 1, zIndex: 0 },
+  animate: (move: Move) => ({
+    transform: at('0px', '0px'),
+    opacity: 1,
+    zIndex: 1,
+    transition:
+      move === 'loop' ? { duration: LOOP_FADE, delay: LOOP_FADE + 0.15, ease: 'easeOut' as const } : { duration: move === 'push' || move === 'up' ? 0.4 : 0.3, ease: EASE_NAV },
+  }),
+  exit: (move: Move) =>
+    move === 'push' || move === 'up'
+      ? { opacity: 0.999, zIndex: 0, transition: { duration: 0.4 } }
+      : move === 'down'
+        ? { transform: at('0px', '28px'), opacity: 0, zIndex: 2, transition: { duration: 0.3, ease: EASE_NAV } }
+        : { opacity: 0, zIndex: 2, transition: { duration: move === 'loop' ? LOOP_FADE : 0.3, ease: 'easeInOut' as const } },
+}
+
 /** One screen of the film with the clock of its own step, frozen once the step is over. */
-function StepLayer({ stepKey, clockFor, move, reduce, step }: { stepKey: string; clockFor: (key: string) => FilmClock; move: Move; reduce: boolean; step: FilmStep }) {
+function StepLayer({ stepKey, clockFor, move, reduce, step, device, size }: { stepKey: string; clockFor: (key: string) => FilmClock; move: Move; reduce: boolean; step: FilmStep; device: FilmDevice; size: { w: number; h: number } }) {
   const clock = useMemo(() => clockFor(stepKey), [clockFor, stepKey])
   return (
     <motion.div
       custom={reduce ? 'fade' : move}
-      variants={SCREEN_VARIANTS}
+      variants={device === 'desktop' ? DESKTOP_VARIANTS : SCREEN_VARIANTS}
       initial="initial"
       animate="animate"
       exit="exit"
       style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#F5F7F9', boxShadow: '0 0 28px -10px rgba(0,0,0,0.3)', willChange: 'transform, opacity', transformOrigin: move === 'launch' ? LAUNCH_ORIGIN : '50% 50%' }}
     >
       <FilmClockContext.Provider value={clock}>
-        {step.src && <img src={step.src} alt="" width={390} height={844} draggable={false} style={{ display: 'block', width: 390, height: 844 }} />}
+        {step.src && <img src={step.src} alt="" width={size.w} height={size.h} draggable={false} style={{ display: 'block', width: size.w, height: size.h }} />}
         {step.screen}
-        {step.taps?.map((tap, i) => tap.press && <PressHighlight key={i} tap={tap} />)}
+        {step.taps?.map((tap, i) => (tap.press || tap.hover) && <PressHighlight key={i} tap={tap} />)}
         {step.overlay}
       </FilmClockContext.Provider>
     </motion.div>
   )
 }
 
-/** The control under the finger darkens the moment it is touched and clears when the finger lifts. */
+/**
+ * The control under the finger darkens the moment it is touched and clears when the finger lifts. On a desktop,
+ * `hover` gives the control a light tint while the cursor is over it, then `press` darkens it for the click.
+ */
 function PressHighlight({ tap }: { tap: FilmTap }) {
   const t = useFilmTime(0.016)
-  const p = tap.press!
-  const on = phase(t, tap.at, 0.04) * (1 - phase(t, tap.at + (tap.hold ?? FINGER_HOLD), 0.15))
-  if (on <= 0) return null
-  return <span aria-hidden="true" style={{ position: 'absolute', left: tap.x - p.w / 2, top: tap.y - p.h / 2, width: p.w, height: p.h, borderRadius: p.r, background: 'rgba(0,0,0,0.13)', opacity: on }} />
+  const release = tap.at + (tap.hold ?? FINGER_HOLD)
+  const press = tap.press ? phase(t, tap.at, 0.04) * (1 - phase(t, release, 0.15)) : 0
+  const h = tap.hover
+  const hover = h ? phase(t, tap.at - 0.3, 0.2) * (1 - phase(t, release + 0.5, 0.3)) : 0
+  const box = (b: { w: number; h: number; r: number }, background: string, opacity: number) => (
+    <span aria-hidden="true" style={{ position: 'absolute', left: tap.x - b.w / 2, top: tap.y - b.h / 2, width: b.w, height: b.h, borderRadius: b.r, background, opacity }} />
+  )
+  return (
+    <>
+      {h && hover > 0 && box(h, 'rgba(0,0,0,0.05)', hover)}
+      {tap.press && press > 0 && box(tap.press, 'rgba(0,0,0,0.13)', press)}
+    </>
+  )
 }
 
 /** How long a finger stays on the glass for a tap, and how far it drifts once lifted */
@@ -278,20 +341,125 @@ function Wave({ x, y, p, strength }: { x: number; y: number; p: number; strength
   )
 }
 
-/** The camera at rest: the whole phone */
-const REST = { x: 195, y: 422, zoom: 1 }
-// Phone geometry, as shares of its width (see DeviceMockup): bezel, screen height, phone height
+/** How long the cursor stays on the button for a click, and how far it drifts once the click is done */
+const CURSOR_HOLD = 0.12
+const CURSOR_DRIFT = { x: 26, y: 20 }
+
+/**
+ * The reader's cursor on a desktop: an arrow that travels from one control to the next on a slightly curved
+ * path, slows down as it arrives, presses (it shrinks a little, a thin ring spreads from the point of the
+ * click), then drifts away and fades once the click is done. The tip of the arrow is the point (x, y).
+ */
+function Pointer({ taps, from }: { taps: FilmTap[]; from: { x: number; y: number } }) {
+  const t = useFilmTime(0.016)
+
+  let x = from.x
+  let y = from.y
+  let prev = from
+  let free = 0
+  let settled = true
+  for (const tap of taps) {
+    const start = Math.max(free, tap.at - 0.6)
+    const end = tap.at - 0.04
+    if (t < start) {
+      x = prev.x
+      y = prev.y
+      settled = false
+      break
+    }
+    if (t < end) {
+      const p = easeInOut((t - start) / Math.max(0.05, end - start))
+      x = lerp(prev.x, tap.x, p)
+      y = lerp(prev.y, tap.y, p) - Math.sin(Math.PI * p) * 10
+      settled = false
+      break
+    }
+    x = tap.x
+    y = tap.y
+    prev = tap
+    free = tap.at + (tap.hold ?? CURSOR_HOLD)
+  }
+  const last = taps[taps.length - 1]
+  if (settled && last) {
+    const lift = easeOut(phase(t, last.at + (last.hold ?? CURSOR_HOLD), 0.5))
+    x = last.x + CURSOR_DRIFT.x * lift
+    y = last.y + CURSOR_DRIFT.y * lift
+  }
+
+  // Shown while it travels and for a moment after a click; gone on screens it does not touch
+  let shown = 0
+  let prevRelease = -Infinity
+  let down = 0
+  let ripple: { p: number; tap: FilmTap } | null = null
+  for (const tap of taps) {
+    const release = tap.at + (tap.hold ?? CURSOR_HOLD)
+    const start = Math.max(prevRelease, tap.at - 0.6)
+    shown = Math.max(shown, phase(t, start - 0.15, 0.2) * (1 - phase(t, release + 0.9, 0.4)))
+    down = Math.max(down, phase(t, tap.at, 0.06) * (1 - phase(t, release, 0.12)))
+    const since = t - tap.at
+    if (since >= 0 && since < 0.5) ripple = { p: since / 0.5, tap }
+    prevRelease = release
+  }
+  if (shown <= 0) return null
+  return (
+    <>
+      {ripple && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: ripple.tap.x,
+            top: ripple.tap.y,
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            boxShadow: 'inset 0 0 0 2px rgba(17,17,17,0.35)',
+            opacity: 1 - ripple.p,
+            transform: `translate(-50%, -50%) scale(${0.3 + 0.9 * easeOut(ripple.p)})`,
+            pointerEvents: 'none',
+            zIndex: 4,
+          }}
+        />
+      )}
+      <svg
+        aria-hidden="true"
+        width="22"
+        height="30"
+        viewBox="-1 -1 22 30"
+        style={{ position: 'absolute', left: x, top: y, opacity: shown, transform: `scale(${1 - 0.14 * down})`, transformOrigin: '1px 1px', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))', pointerEvents: 'none', zIndex: 5 }}
+      >
+        <path d="M0 0 L0 17.5 L4.4 13.4 L7.4 20.4 L10.2 19.2 L7.2 12.4 L13 12.4 Z" fill="#111" stroke="#fff" strokeWidth="1.3" strokeLinejoin="round" />
+      </svg>
+    </>
+  )
+}
+
+// Phone geometry, as shares of its width (see DeviceMockup): the bezel around the screen
 const BEZEL = 0.034
-const SCREEN_H = (1 - 2 * BEZEL) * (844 / 390)
-const PHONE_H = SCREEN_H + 2 * BEZEL
+// Browser window: the height of the bar above the page, as a share of the window width (see DeviceMockup)
+const CHROME = 0.046
+
+/** Where the screen sits inside the device, as shares of the device width: left, top, width, height, and the total height. */
+function frameOf(device: FilmDevice, size: { w: number; h: number }) {
+  if (device === 'phone') {
+    const w = 1 - 2 * BEZEL
+    const h = w * (size.h / size.w)
+    return { left: BEZEL, top: BEZEL, w, h, total: h + 2 * BEZEL }
+  }
+  const h = size.h / size.w
+  return { left: 0, top: CHROME, w: 1, h, total: CHROME + h }
+}
 
 /**
  * The camera over the phone, as in a product film: it pushes in on the part of the screen where the action
  * is and pulls back out, on a critically damped spring so it never overshoots. While it travels, a blur that
  * grows with its speed gives the move its motion blur.
  */
-function Camera({ shots, stepKey, reduce, children }: { shots?: FilmShot[]; stepKey: string; reduce: boolean; children: React.ReactNode }) {
+function Camera({ shots, stepKey, reduce, device, size, children }: { shots?: FilmShot[]; stepKey: string; reduce: boolean; device: FilmDevice; size: { w: number; h: number }; children: React.ReactNode }) {
   const t = useFilmTime(0.016)
+  // At rest the camera shows the whole device
+  const REST = useMemo(() => ({ x: size.w / 2, y: size.h / 2, zoom: 1 }), [size.w, size.h])
+  const frame = frameOf(device, size)
   const carry = useRef(REST)
   const lastKey = useRef(stepKey)
   if (lastKey.current !== stepKey) {
@@ -317,8 +485,8 @@ function Camera({ shots, stepKey, reduce, children }: { shots?: FilmShot[]; step
   const vy = useVelocity(y)
   const vz = useVelocity(zoom)
   const transform = useTransform([x, y, zoom], ([px, py, z]: number[]) => {
-    const u = BEZEL + (1 - 2 * BEZEL) * (px / 390)
-    const v = (BEZEL + SCREEN_H * (py / 844)) / PHONE_H
+    const u = frame.left + frame.w * (px / size.w)
+    const v = (frame.top + frame.h * (py / size.h)) / frame.total
     return `translate3d(${(0.5 - u) * z * 100}%, ${(0.5 - v) * z * 100}%, 0) scale(${z})`
   })
   const filter = useTransform([vx, vy, vz], ([a, b, c]: number[]) => {
@@ -336,7 +504,8 @@ function Camera({ shots, stepKey, reduce, children }: { shots?: FilmShot[]; step
  * leaves or when the tab is hidden. One small button pauses it. It plays the same with reduced motion: the
  * film is the content of the figure.
  */
-export default function JourneyFilm({ steps, label, labels }: JourneyFilmProps) {
+export default function JourneyFilm({ steps, label, labels, device = 'phone', size: sizeProp, url }: JourneyFilmProps) {
+  const size = useMemo(() => sizeProp ?? FILM_SIZE[device], [sizeProp, device])
   // The film plays in full whatever the system motion setting: it is the content (see useGestureReducedMotion)
   const reduce = false
   const rootRef = useRef<HTMLDivElement>(null)
@@ -449,14 +618,16 @@ export default function JourneyFilm({ steps, label, labels }: JourneyFilmProps) 
     [delayed, step]
   )
 
-  // The finger starts where it left the previous screen it touched
+  // The finger (or the cursor) starts where it left the previous screen it touched
   const fingerFrom = useMemo(() => {
+    const drift = device === 'desktop' ? CURSOR_DRIFT : FINGER_DRIFT
     for (let i = index - 1; i >= 0; i--) {
       const last = steps[i].taps?.[steps[i].taps!.length - 1]
-      if (last) return { x: last.x + FINGER_DRIFT.x, y: last.y + FINGER_DRIFT.y }
+      if (last) return { x: last.x + drift.x, y: last.y + drift.y }
     }
-    return FINGER_HOME
-  }, [index, steps])
+    // The first time, it comes from outside the screen: below on a phone, from the lower right on a desktop
+    return device === 'desktop' ? { x: size.w * 0.82, y: size.h * 1.04 } : FINGER_HOME
+  }, [index, steps, device, size.w, size.h])
   const fingerClock = useMemo(() => clockFor(stepKey), [clockFor, stepKey])
 
   const toggle = () => {
@@ -466,12 +637,12 @@ export default function JourneyFilm({ steps, label, labels }: JourneyFilmProps) 
 
   const screen = (
     <div className="absolute inset-0 overflow-hidden bg-[#F5F7F9]">
-      <ScaledScreen>
+      <ScaledScreen width={size.w} height={size.h}>
         <AnimatePresence initial={false} custom={reduce ? 'fade' : move}>
-          <StepLayer key={stepKey} stepKey={stepKey} clockFor={clockFor} move={move} reduce={reduce} step={shownStep} />
+          <StepLayer key={stepKey} stepKey={stepKey} clockFor={clockFor} move={move} reduce={reduce} step={shownStep} device={device} size={size} />
         </AnimatePresence>
         <FilmClockContext.Provider value={fingerClock}>
-          <Finger key={stepKey} taps={shownStep.taps ?? []} from={fingerFrom} />
+          {device === 'desktop' ? <Pointer key={stepKey} taps={shownStep.taps ?? []} from={fingerFrom} /> : <Finger key={stepKey} taps={shownStep.taps ?? []} from={fingerFrom} />}
         </FilmClockContext.Provider>
       </ScaledScreen>
     </div>
@@ -479,11 +650,11 @@ export default function JourneyFilm({ steps, label, labels }: JourneyFilmProps) 
 
   return (
     <div ref={rootRef} role="group" aria-label={label} className="relative bg-[#E8E8E8] rounded-xl overflow-hidden ring-1 ring-black/[0.04]">
-      <div className="flex justify-center px-6 pt-10 pb-12 md:pt-14 md:pb-16">
-        <div className="w-[min(74vw,340px)] md:w-[360px]">
+      <div className={device === 'desktop' ? 'flex justify-center px-4 py-8 md:px-12 md:py-14' : 'flex justify-center px-6 pt-10 pb-12 md:pt-14 md:pb-16'}>
+        <div className={device === 'desktop' ? 'w-full max-w-[880px]' : 'w-[min(74vw,340px)] md:w-[360px]'}>
           <FilmClockContext.Provider value={fingerClock}>
-            <Camera shots={shownStep.camera} stepKey={stepKey} reduce={reduce}>
-              <DeviceMockup kind="phone" screen={{ src: steps[0].src ?? '' }} label={label} custom={screen} />
+            <Camera shots={shownStep.camera} stepKey={stepKey} reduce={reduce} device={device} size={size}>
+              <DeviceMockup kind={device === 'desktop' ? 'browser' : 'phone'} aspect={size.w / size.h} url={url} screen={{ src: steps[0].src ?? '' }} label={label} custom={screen} />
             </Camera>
           </FilmClockContext.Provider>
         </div>

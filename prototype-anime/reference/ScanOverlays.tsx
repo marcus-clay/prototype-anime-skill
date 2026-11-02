@@ -38,7 +38,7 @@ export function PulseOverlay({ x, y, width, height, radius = 14, delay = 0.5 }: 
       initial={{ opacity: 0 }}
       animate={reduce ? { opacity: 0 } : { opacity: [0, 1, 0, 1, 0] }}
       transition={{ duration: 1.8, delay, ease: 'easeInOut' }}
-      style={{ position: 'absolute', left: x - 3, top: y - 3, width: width + 6, height: height + 6, borderRadius: radius + 3, boxShadow: '0 0 0 2px rgba(39,110,63,0.55)' }}
+      style={{ position: 'absolute', left: x - 3, top: y - 3, width: width + 6, height: height + 6, borderRadius: radius + 3, boxShadow: '0 0 0 2px rgba(47,111,235,0.55)' }}
     />
   )
 }
